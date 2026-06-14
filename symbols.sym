@@ -1,0 +1,11 @@
+TABLE none
+SYMBOL = func TYPE = bool SUBTYPE none NAME = regex REF = 0
+TABLE func
+SYMBOL = param TYPE = literal SUBTYPE none NAME = source_file REF = 0
+END TABLE func
+SYMBOL = func TYPE = int SUBTYPE none NAME = main REF = 0
+TABLE func
+SYMBOL = param TYPE = strarr SUBTYPE none NAME = argv REF = 0
+SYMBOL = param TYPE = int SUBTYPE none NAME = argc REF = 0
+END TABLE func
+END TABLE none
