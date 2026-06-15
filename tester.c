@@ -13,7 +13,8 @@ regex_test tests[] = {
     {"![heo]\\", false},
     {"![heo]", false},
     {".", false},
-    {"", false}
+    {"", false},
+    {"![text](category/other)",false}
 };
 
 int main(){

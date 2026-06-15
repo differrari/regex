@@ -69,7 +69,6 @@ regex_handle init_regex_slice(string_slice pattern){
         ignore_next = false;
         current_append_rule = regex_append_success;
     }
-
     
     return handle;
 }
