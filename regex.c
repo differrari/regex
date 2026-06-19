@@ -22,6 +22,10 @@ typedef enum {
     regex_append_failure = 1 << 2
 } regex_state_append;
 
+#define link_node(node) if (current_append_rule & regex_append_failure) previous_node->fail = node;\
+if (current_append_rule & regex_append_success) previous_node->success = node;
+
+// TODO: structure the regex state machine into being stack-based
 regex_handle init_regex_slice(string_slice pattern){
     bool ignore_next = false;
 
@@ -29,6 +33,7 @@ regex_handle init_regex_slice(string_slice pattern){
     
     regex_node *previous_node = 0;
     regex_state_append current_append_rule = regex_append_success;
+    bool should_invert = false;
     for (int i = 0; i < pattern.length; i++){
         char next_char = pattern.data[i];
         if (!ignore_next){
@@ -49,16 +54,29 @@ regex_handle init_regex_slice(string_slice pattern){
                 current_append_rule = regex_append_failure;
                 continue;
             }
+            if (next_char == '^'){
+                should_invert = true;
+                continue;
+            }
             if (next_char == '?'){
                 current_append_rule = regex_append_success | regex_append_failure;
+                continue;
+            }
+            if (next_char == '(' || next_char == ')'){
+                regex_node *node = regex_new_node();
+                link_node(node);
+                node->type = next_char == '(' ? regex_node_start_group : regex_node_end_group;
+                current_append_rule = regex_append_success | regex_append_failure;
+                previous_node = node;
                 continue;
             }
         }
         regex_node *node = regex_new_node();
         node->literal = next_char;
+        node->invert = should_invert;
+        should_invert = false;
         if (previous_node){
-            if (current_append_rule & regex_append_failure) previous_node->fail = node;
-            if (current_append_rule & regex_append_success) previous_node->success = node;
+            link_node(node);
         }
         if (!handle.root) {
             handle.root = node;
@@ -74,7 +92,19 @@ regex_handle init_regex_slice(string_slice pattern){
 }
 
 void regex_debug_node(regex_node *node,int depth){
-    print("%s%c",indent_by(depth),node->literal);
+    if (node->type != regex_node_match){
+        switch (node->type){
+            case regex_node_start_group: 
+                print("Start capture group"); break;
+            case regex_node_end_group: 
+                print("End capture group"); break;
+            default: break;
+        }
+        if (node->success) regex_debug_node(node->success, depth+1);
+        else if (node->fail) regex_debug_node(node->fail, depth+1);
+        return;
+    }
+    print("%s%s%c",indent_by(depth),node->invert ? "^" : "",node->literal);
         print("%sSucc:",indent_by(depth));
     if (node->success){
         if (node->success == node) print("%sself",indent_by(depth+1));
@@ -119,6 +149,10 @@ regex_result regex_find_one(regex_handle *handle, string_slice str){
     return find_one_result;
 }
 
+static inline bool regex_does_match(char c, regex_node *node){
+    return node->invert ^ (node->literal == c);
+}
+
 bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(regex_result)){
     if (!handle || !handle->root || !str.length)        
         return false;
@@ -126,12 +160,50 @@ bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(reg
     regex_result result = {};
     bool ever_found = false;
     result.found = false;
+    bool is_capture_group = false;
     for (u64 i = 0; i < str.length; i++){
         if (!current_node) current_node = handle->root;
+
+        if (current_node->type != regex_node_match){
+            switch (current_node->type){
+                case regex_node_start_group:
+                    if (is_capture_group){
+                        print("[REGEX implementation error] nesting capture groups not allowed");
+                        return false;
+                    }
+                    if (result.capture_count >= MAX_CAPTURE_GROUPS){
+                        print("[REGEX implementation error] there is a maximum of %i capture groups",MAX_CAPTURE_GROUPS);
+                        return false;
+                    }
+                    is_capture_group = true;
+                    result.capture_count++;
+                    result.capture_groups[result.capture_count].start = i;
+                    current_node = current_node->success ?: current_node->fail;
+                    i--;
+                    continue;
+                case regex_node_end_group:
+                    if (!is_capture_group){
+                        print("[REGEX error] ending unknown capture group");
+                        return false;
+                    }
+                    is_capture_group = false;
+                    current_node = current_node->success ?: current_node->fail;
+                    i--;
+                    continue;
+                    break;
+                default:
+                    break;
+            }
+            continue;
+        }
+        
         char current_char = str.data[i];
         // print("%c vs %c",current_node->literal,current_char);
         
-        if (current_node->literal == current_char){
+        if (regex_does_match(current_char, current_node)){
+            if (is_capture_group){
+                result.capture_groups[result.capture_count].size++;
+            }
             if (current_node == handle->root) result.result_range.start = i;
             if (current_node->success) current_node = current_node->success;
             else {
