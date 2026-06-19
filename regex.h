@@ -40,6 +40,7 @@ typedef struct {
 #define MAX_CAPTURE_GROUPS 16
 
 typedef struct {
+    string_slice full_slice;
     bool found;
     range_t result_range;
     u64 capture_count;

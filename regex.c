@@ -34,7 +34,7 @@ regex_handle init_regex_slice(string_slice pattern){
     regex_node *previous_node = 0;
     regex_state_append current_append_rule = regex_append_success;
     bool should_invert = false;
-    for (int i = 0; i < pattern.length; i++){
+    for (u64 i = 0; i < pattern.length; i++){
         char next_char = pattern.data[i];
         if (!ignore_next){
             if (next_char == '\\'){
@@ -157,7 +157,7 @@ bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(reg
     if (!handle || !handle->root || !str.length)        
         return false;
     regex_node *current_node = 0;
-    regex_result result = {};
+    regex_result result = {.full_slice = str};
     bool ever_found = false;
     result.found = false;
     bool is_capture_group = false;
@@ -210,6 +210,7 @@ bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(reg
                 ever_found = true;
                 result.found = true;
                 result.result_range.size = i-result.result_range.start;
+                result.full_slice = str;
                 if (!on_find(result)) break;
                 result = (regex_result){};
                 continue;
