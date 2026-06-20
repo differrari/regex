@@ -2,6 +2,7 @@
 
 #include "types.h"
 #include "string/slice.h"
+#include "data/struct/stack.h"
 
 /*
     Current syntax
@@ -34,7 +35,7 @@ typedef struct regex_node {
 } regex_node;
 
 typedef struct {
-    regex_node *root;
+    arr_stack_t *regex_stack;
 } regex_handle;
 
 #define MAX_CAPTURE_GROUPS 16
