@@ -7,9 +7,8 @@
 #include "memory/memory.h"
 
 regex_node* regex_get_node(regex_handle *handle, int index){
-    if (index < 0 || index > stack_count(handle->regex_stack)){
+    if (index < 0 || index > stack_count(handle->regex_stack))
         return 0;
-    }
     return stack_get(handle->regex_stack, index);
 }
 
@@ -50,14 +49,14 @@ regex_handle init_regex_slice(string_slice pattern){
                 continue;
             }
             if (next_char == '*'){
-                previous_node->success = previous_node;
+                previous_node->success = 0;
                 current_append_rule = regex_append_failure;
                 continue;
             }
             if (next_char == '+'){
                 regex_node *new_node = regex_clone_node(&handle, previous_node);
-                previous_node->success = new_node;
-                new_node->success = new_node;
+                previous_node->success = 1;
+                new_node->success = 0;
                 previous_node = new_node;
                 current_append_rule = regex_append_failure;
                 continue;
@@ -72,7 +71,7 @@ regex_handle init_regex_slice(string_slice pattern){
             }
             if (next_char == '(' || next_char == ')'){
                 regex_node *node = regex_new_node(&handle);
-                link_node(node);
+                link_node(1);
                 node->type = next_char == '(' ? regex_node_start_group : regex_node_end_group;
                 current_append_rule = regex_append_success | regex_append_failure;
                 previous_node = node;
@@ -84,7 +83,7 @@ regex_handle init_regex_slice(string_slice pattern){
         node->invert = should_invert;
         should_invert = false;
         if (previous_node){
-            link_node(node);
+            link_node(1);
         }
         previous_node = node;
         // print("Expecting %c",next_char);
@@ -96,31 +95,31 @@ regex_handle init_regex_slice(string_slice pattern){
 }
 
 void regex_debug_node(regex_node *node,int depth){
-    if (node->type != regex_node_match){
-        switch (node->type){
-            case regex_node_start_group: 
-                print("Start capture group"); break;
-            case regex_node_end_group: 
-                print("End capture group"); break;
-            default: break;
-        }
-        if (node->success) regex_debug_node(node->success, depth+1);
-        else if (node->fail) regex_debug_node(node->fail, depth+1);
-        return;
-    }
-    print("%s%s%c",indent_by(depth),node->invert ? "^" : "",node->literal);
-        print("%sSucc:",indent_by(depth));
-    if (node->success){
-        if (node->success == node) print("%sself",indent_by(depth+1));
-        else
-            regex_debug_node(node->success, depth+1);
-    }
-    print("%sFail:",indent_by(depth));
-    if (node->fail){
-        if (node->fail == node) print("%sself",indent_by(depth+1));
-        else
-            regex_debug_node(node->fail, depth+1);
-    }
+    // if (node->type != regex_node_match){
+    //     switch (node->type){
+    //         case regex_node_start_group: 
+    //             print("Start capture group"); break;
+    //         case regex_node_end_group: 
+    //             print("End capture group"); break;
+    //         default: break;
+    //     }
+    //     if (node->success) regex_debug_node(node->success, depth+1);
+    //     else if (node->fail) regex_debug_node(node->fail, depth+1);
+    //     return;
+    // }
+    // print("%s%s%c",indent_by(depth),node->invert ? "^" : "",node->literal);
+    //     print("%sSucc:",indent_by(depth));
+    // if (node->success){
+    //     if (node->success == node) print("%sself",indent_by(depth+1));
+    //     else
+    //         regex_debug_node(node->success, depth+1);
+    // }
+    // print("%sFail:",indent_by(depth));
+    // if (node->fail){
+    //     if (node->fail == node) print("%sself",indent_by(depth+1));
+    //     else
+    //         regex_debug_node(node->fail, depth+1);
+    // }
 }
 
 void regex_debug(regex_handle *handle){
@@ -160,13 +159,13 @@ static inline bool regex_does_match(char c, regex_node *node){
 bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(regex_result)){
     if (!handle || !handle->regex_stack || !str.length)        
         return false;
-    regex_node *current_node = 0;
+    int node_index = 0;
     regex_result result = {.full_slice = str};
     bool ever_found = false;
     result.found = false;
     bool is_capture_group = false;
     for (u64 i = 0; i < str.length; i++){
-        if (!current_node) current_node = regex_get_node(handle, 0);
+        regex_node *current_node = regex_get_node(handle, node_index);
 
         if (current_node->type != regex_node_match){
             switch (current_node->type){
@@ -182,7 +181,7 @@ bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(reg
                     is_capture_group = true;
                     result.capture_count++;
                     result.capture_groups[result.capture_count].start = i;
-                    current_node = current_node->success ?: current_node->fail;
+                    node_index += current_node->success;
                     i--;
                     continue;
                 case regex_node_end_group:
@@ -191,7 +190,7 @@ bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(reg
                         return false;
                     }
                     is_capture_group = false;
-                    current_node = current_node->success ?: current_node->fail;
+                    node_index += current_node->success;
                     i--;
                     continue;
                     break;
@@ -209,7 +208,7 @@ bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(reg
                 result.capture_groups[result.capture_count].size++;
             }
             if (current_node == regex_get_node(handle, 0)) result.result_range.start = i;
-            if (current_node->success) current_node = current_node->success;
+            if (current_node->success) node_index += current_node->success;
             else {
                 ever_found = true;
                 result.found = true;
@@ -221,10 +220,10 @@ bool regex_find_many(regex_handle *handle, string_slice str, bool (*on_find)(reg
             }
         } else if (current_node != regex_get_node(handle, 0)) {
             i--;
-            if (current_node->fail) current_node = current_node->fail;
+            if (current_node->fail) node_index += current_node->fail;
             else {
                 // print("Found %c instead of expected %c",current_char, current_node->literal);
-                current_node = 0;
+                node_index = 0;
                 result = (regex_result){};
                 continue;
             }

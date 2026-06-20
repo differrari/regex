@@ -30,8 +30,8 @@ typedef struct regex_node {
     // TODO: Character ranges [0-9]
     bool invert;
     regex_node_type type;
-    struct regex_node *success;
-    struct regex_node *fail;
+    int success;
+    int fail;
 } regex_node;
 
 typedef struct {
