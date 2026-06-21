@@ -1,10 +1,10 @@
 (load "~/redbuild/v3/redbuild.lisp")
 
-; (redb-set-tester "tester.c")
+; (redbuild:set-tester "tester.c")
 
-(quick_redb (make-instance `redmod
+(redbuild:quick-build (redbuild:make-instance `redbuild:redmod
         :name "regex"
-        :type (dynlib)
-        :target (native)
-        :srcs (dynsrc "regex.c")
-) :add-dependencies t :run t :success (lambda () (print "Done") (print (emit_compile_commands))))
+        :type (redbuild:dynlib)
+        :target (redbuild:native)
+        :srcs (redbuild:dynsrc "regex.c")
+) :add-dependencies t :run t :success (lambda () (print "Done") (print (redbuild:emit-compile-commands))))
